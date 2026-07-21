@@ -24,7 +24,7 @@ jobs:
       - name: 安装系统依赖与 Xvfb (虚拟屏幕)
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb wget curl unzip libxi6 libgconf-2-4 jq
+          sudo apt-get install -y xvfb wget curl unzip libxi6 jq
 
       - name: 安装 Python 依赖包
         run: |
