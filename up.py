@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-import os,re,sys,time,requests
+import os, re, sys, time, requests
+from datetime import datetime, timedelta, timezone
 from seleniumbase import SB
 
 # 环境变量 
@@ -11,34 +12,12 @@ TG_CHAT_ID = os.environ.get("TG_CHAT_ID") or ""      # tg通知 chat_id id
 PROXY_SOCKS5 = os.environ.get("PROXY_SOCKS5") or ""  # 代理地址
 
 BASE_URL = "https://client.therose.cloud/login"
+CART_RENEW_URL = "https://client.therose.cloud/panel?routeName=cart_renew&id=2600"
 
 # 检查必要变量
 if not EMAIL or not PASSWORD:
     print("❌ 请设置环境变量 EMAIL 和 PASSWORD")
     sys.exit(1)
-
-# 点击续期按钮
-def click_extend_button(sb):
-    selectors = [
-        'span:contains("Extend")',
-        'button:contains(title="Extend")',
-    ]
-    for sel in selectors:
-        try:
-            if sb.find_element(sel, timeout=2):
-                print(f"✅ 找到按钮，选择器: {sel}")
-                sb.uc_click(sel, timeout=5)
-                print("✅ 点击成功")
-                return True, {}
-        except:
-            continue
-    try:
-        btn = sb.find_element('button:contains("Extend")', timeout=2)
-        sb.driver.execute_script("arguments[0].click();", btn)
-        print("✅ 通过 JavaScript 点击成功")
-        return True, {}
-    except Exception as e:
-        return False, {"error": str(e)}
 
 # 检查续期是否成功
 def check_renewal_success(sb):
@@ -145,6 +124,40 @@ def login(sb, email, password):
     sb.save_screenshot("login_faild.png")
     return False, sb.get_current_url()
 
+# 解析时间字符串并生成 Cron 表达式与续期判定
+def handle_renew_time_and_cron(date_text):
+    # 提取起始时间部分，例："21.07.2026, 21:50"
+    start_str = date_text.split(" - ")[0].strip()
+    
+    # 解析成 datetime 对象
+    start_dt = datetime.strptime(start_str, "%d.%m.%Y, %H:%M").replace(tzinfo=timezone.utc)
+    
+    # 可续期起始时刻：到期前 30 分钟
+    renew_window_start = start_dt - timedelta(minutes=30)
+    
+    # 计算每 6 小时触发一次对应的四个每天固定时刻 (Cron 分钟与小时)
+    minute = renew_window_start.minute
+    base_hour = renew_window_start.hour % 6
+    hours = [(base_hour + i * 6) % 24 for i in range(4)]
+    hours.sort()
+    
+    hours_str = ",".join(map(str, hours))
+    cron_expr = f"{minute} {hours_str} * * *"
+    
+    # 1. 写入 cron.txt 纯表达式
+    with open("cron.txt", "w") as f:
+        f.write(cron_expr)
+    print(f"📝 固化 Cloudflare Worker Cron 表达式至 cron.txt: {cron_expr}")
+    
+    # 2. 判断当前时间是否落在可续期时间窗口（到期前30分钟至到期时刻之间）
+    now_utc = datetime.now(timezone.utc)
+    print(f"🕒 当前 UTC 时间: {now_utc.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"⌛ 到期时刻: {start_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"⏳ 允许续期开始时刻: {renew_window_start.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    should_renew = renew_window_start <= now_utc <= start_dt
+    return should_renew, cron_expr
+
 # 主流程
 def main():
     print("🚀 启动浏览器")
@@ -163,23 +176,36 @@ def main():
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
 
-        print("📄 开始续期流程...")
+        print("🌐 直接跳转到续期购物车页面...")
+        sb.open(CART_RENEW_URL)
+        sb.wait_for_ready_state_complete()
+        sb.sleep(2)
         
-        # 点击 Extend 按钮
-        ok, info = click_extend_button(sb)
-        if not ok:
-            msg = f"❌ 点击 Extend 按钮失败: {info.get('error')}"
+        # 查找包含续期时间段的元素
+        try:
+            date_elem = sb.find_element('//*[@id="selected-dates"]', timeout=10)
+            date_text = date_elem.text.strip()
+            print(f"📅 获取到的续期时间段文本: {date_text}")
+        except Exception as e:
+            msg = f"❌ 未获取到续期时间段元素 (selected-dates): {e}"
             print(msg)
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
+
+        # 计算 Cron 并判断是否满足续期时间限制
+        should_renew, cron_expr = handle_renew_time_and_cron(date_text)
         
-        time.sleep(1)
-        
-        # 点击 Order now 按钮
+        if not should_renew:
+            msg = f"ℹ️ 尚未达到续期窗口（需在到期前30分钟内）。已更新 Cron 表达式 [{cron_expr}] 至 cron.txt，跳过本次 Order now。"
+            print(msg)
+            send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
+            return
+
+        # 符合条件，点击 Order now 按钮
         try:
             button = sb.find_element('button:contains("Order now")', timeout=5)
             if button:
-                print("🛒 点击 Order now 按钮...")
+                print("🛒 满足时间条件，点击 Order now 按钮...")
                 sb.uc_click('button:contains("Order now")')
                 print("✅ 已点击 Order now 按钮")
             else:
@@ -198,7 +224,7 @@ def main():
         renewal_success, renewal_msg = check_renewal_success(sb)
         
         if renewal_success:
-            msg = f"✅ 续期成功！{renewal_msg}"
+            msg = f"✅ 续期成功！{renewal_msg}\nWorker Cron: {cron_expr}"
             print(msg)
             sb.save_screenshot("renewal_success.png")
         else:
