@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import os,re,sys,time,requests
+import os, re, sys, time, requests
 from seleniumbase import SB
 
 # 环境变量 
@@ -8,6 +8,7 @@ EMAIL = os.environ.get("EMAIL") or ""            # 邮箱
 PASSWORD = os.environ.get("PASSWORD") or ""      # 密码
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN") or ""  # tg通知 bot token
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID") or ""      # tg通知 chat_id id
+PROXY_SOCKS5 = os.environ.get("PROXY_SOCKS5") or os.environ.get("HTTP_PROXY") or "" # 代理地址
 
 BASE_URL = "https://client.therose.cloud/login"
 
@@ -81,8 +82,17 @@ def send_tg(token, chat_id, message):
     if not token or not chat_id:
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    
+    # 若配置了代理，则给 requests 显式设置 proxies
+    proxies = None
+    if PROXY_SOCKS5:
+        proxies = {
+            "http": PROXY_SOCKS5,
+            "https": PROXY_SOCKS5
+        }
+
     try:
-        resp = requests.post(url, json={"chat_id": chat_id, "text": message}, timeout=10)
+        resp = requests.post(url, json={"chat_id": chat_id, "text": message}, proxies=proxies, timeout=10)
         if resp.status_code == 200:
             print("📨 Telegram 通知已发送")
         else:
@@ -131,7 +141,19 @@ def login(sb, email, password):
 def main():
     print("🚀 启动浏览器")
 
-    with SB(uc=True, headless=False) as sb:
+    # 根据环境变量配置，决定是否传入代理参数
+    sb_kwargs = {
+        "uc": True,
+        "headless": False
+    }
+    
+    if PROXY_SOCKS5:
+        print(f"🌐 浏览器使用代理启动: {PROXY_SOCKS5}")
+        sb_kwargs["proxy"] = PROXY_SOCKS5
+    else:
+        print("⚠️ 未配置/使用代理，浏览器将使用直连模式")
+
+    with SB(**sb_kwargs) as sb:
         success, url = login(sb, EMAIL, PASSWORD)
         
         if not success:
