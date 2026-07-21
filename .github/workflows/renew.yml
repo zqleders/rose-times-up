@@ -1,8 +1,8 @@
 name: Server Auto Renew
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'  # 默认每6小时执行一次
+#  schedule:
+#    - cron: '0 */6 * * *'  # 默认每6小时执行一次
   workflow_dispatch:
 
 jobs:
