@@ -138,9 +138,6 @@ jobs:
           if curl -x socks5://127.0.0.1:10808 -s --max-time 15 https://www.google.com > /dev/null; then
             echo "[INFO] ✅ 代理适配成功！当前协议: $(jq -r '.outbounds[0].type' config.json | tr '[:lower:]' '[:upper:]')"
             echo "PROXY_SOCKS5=socks5://127.0.0.1:10808" >> $GITHUB_ENV
-            echo "HTTP_PROXY=socks5://127.0.0.1:10808" >> $GITHUB_ENV
-            echo "HTTPS_PROXY=socks5://127.0.0.1:10808" >> $GITHUB_ENV
-            echo "ALL_PROXY=socks5://127.0.0.1:10808" >> $GITHUB_ENV
           else
             echo "[ERROR] ❌ 代理连接失败。脱敏配置预览如下："
             jq 'del(.outbounds[0].uuid, .outbounds[0].password)' config.json
@@ -156,8 +153,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           PROXY_SOCKS5: ${{ env.PROXY_SOCKS5 }}
-          HTTP_PROXY: ${{ env.HTTP_PROXY }}
-          HTTPS_PROXY: ${{ env.HTTPS_PROXY }}
+
         run: |
           # 使用 xvfb-run 模拟真实显示屏环境，以适配 uc=True 及 GUI 模式
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python up.py
