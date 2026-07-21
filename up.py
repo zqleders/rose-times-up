@@ -107,7 +107,7 @@ def login(sb, email, password):
     # 截图并发送到 Telegram
     login_click_img = "login_clicked.png"
     sb.save_screenshot(login_click_img)
-    send_tg(TG_BOT_TOKEN, TG_CHAT_ID, "📸 已输入账号密码并点击登录按钮，当前页面状态如下：", photo_path=login_click_img)
+    send_tg(TG_BOT_TOKEN, TG_CHAT_ID, "📸 Rose 已输入账号密码并点击登录按钮，当前页面状态如下：", photo_path=login_click_img)
 
     for _ in range(30):
         # 判断是否登录成功
@@ -171,7 +171,7 @@ def main():
         success, url = login(sb, EMAIL, PASSWORD)
         
         if not success:
-            msg = f"❌ 登录失败"
+            msg = f"❌ Rose 登录失败"
             print(msg)
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
@@ -185,9 +185,9 @@ def main():
         try:
             date_elem = sb.find_element('//*[@id="selected-dates"]', timeout=10)
             date_text = date_elem.text.strip()
-            print(f"📅 获取到的续期时间段文本: {date_text}")
+            print(f"📅 Rose 获取到的续期时间段文本: {date_text}")
         except Exception as e:
-            msg = f"❌ 未获取到续期时间段元素 (selected-dates): {e}"
+            msg = f"❌ Rose 未获取到续期时间段元素 (selected-dates): {e}"
             print(msg)
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
@@ -196,7 +196,7 @@ def main():
         should_renew, cron_expr = handle_renew_time_and_cron(date_text)
         
         if not should_renew:
-            msg = f"ℹ️ 尚未达到续期窗口（需在到期前30分钟内）。已更新 Cron 表达式 [{cron_expr}] 至 cron.txt，跳过本次 Order now。"
+            msg = f"ℹ️ Rose 尚未达到续期窗口（需在到期前30分钟内）。已更新 Cron 表达式 [{cron_expr}] 至 cron.txt，跳过本次 Order now。"
             print(msg)
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
@@ -209,12 +209,12 @@ def main():
                 sb.uc_click('button:contains("Order now")')
                 print("✅ 已点击 Order now 按钮")
             else:
-                msg = "❌ 未找到 Order now 按钮"
+                msg = "❌ Rose 未找到 Order now 按钮"
                 print(msg)
                 send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
                 return
         except Exception as e:
-            msg = f"❌ 点击 Order now 失败: {e}"
+            msg = f"❌ Rose 点击 Order now 失败: {e}"
             print(msg)
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
@@ -224,11 +224,11 @@ def main():
         renewal_success, renewal_msg = check_renewal_success(sb)
         
         if renewal_success:
-            msg = f"✅ 续期成功！{renewal_msg}\nWorker Cron: {cron_expr}"
+            msg = f"✅ Rose 续期成功！{renewal_msg}\nWorker Cron: {cron_expr}"
             print(msg)
             sb.save_screenshot("renewal_success.png")
         else:
-            msg = f"❌ 续期可能失败: {renewal_msg}"
+            msg = f"❌ Rose 续期可能失败: {renewal_msg}"
             print(msg)
             sb.save_screenshot("renewal_failed.png")
         
