@@ -77,14 +77,24 @@ def check_renewal_success(sb):
     
     return False, "未检测到续期成功提示"
 
-# 发送tg通知
-def send_tg(token, chat_id, message):
+# 发送tg通知（支持文本和图片）
+def send_tg(token, chat_id, message, photo_path=None):
     if not token or not chat_id:
         return
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
     proxies = {"http": PROXY_SOCKS5, "https": PROXY_SOCKS5} if PROXY_SOCKS5 else None
+    
     try:
-        resp = requests.post(url, json={"chat_id": chat_id, "text": message}, proxies=proxies, timeout=10)
+        # 如果提供了图片路径且文件存在，发送图片
+        if photo_path and os.path.exists(photo_path):
+            url = f"https://api.telegram.org/bot{token}/sendPhoto"
+            with open(photo_path, 'rb') as photo:
+                files = {'photo': photo}
+                data = {'chat_id': chat_id, 'caption': message}
+                resp = requests.post(url, data=data, files=files, proxies=proxies, timeout=15)
+        else:
+            url = f"https://api.telegram.org/bot{token}/sendMessage"
+            resp = requests.post(url, json={"chat_id": chat_id, "text": message}, proxies=proxies, timeout=10)
+            
         if resp.status_code == 200:
             print("📨 Telegram 通知已发送")
         else:
@@ -114,6 +124,12 @@ def login(sb, email, password):
     print("🔑 点击登录按钮...")
     sb.uc_click('button:contains("Sign in")')
     sb.sleep(3)
+    
+    # 截图并发送到 Telegram
+    login_click_img = "login_clicked.png"
+    sb.save_screenshot(login_click_img)
+    send_tg(TG_BOT_TOKEN, TG_CHAT_ID, "📸 已输入账号密码并点击登录按钮，当前页面状态如下：", photo_path=login_click_img)
+
     for _ in range(30):
         # 判断是否登录成功
         current_url = sb.get_current_url()
