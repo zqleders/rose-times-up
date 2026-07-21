@@ -147,7 +147,7 @@ def handle_renew_time_and_cron(date_text):
     # 1. 写入 cron.txt 纯表达式
     with open("cron.txt", "w") as f:
         f.write(cron_expr)
-    print(f"📝 固化 Cloudflare Worker Cron 表达式至 cron.txt: {cron_expr}")
+    print(f"📝 固化 cron.txt: {cron_expr}")
     
     # 2. 判断当前时间是否落在可续期时间窗口（到期前30分钟至到期时刻之间）
     now_utc = datetime.now(timezone.utc)
