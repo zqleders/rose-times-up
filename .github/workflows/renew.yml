@@ -24,7 +24,7 @@ jobs:
       - name: 安装系统依赖与 Xvfb (虚拟屏幕)
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb wget curl unzip libxi6 libgconf-2-4
+          sudo apt-get install -y xvfb wget curl unzip libxi6 libgconf-2-4 jq
 
       - name: 安装 Python 依赖包
         run: |
@@ -34,6 +34,7 @@ jobs:
       - name: 安装/配置 Chrome 与 ChromeDriver
         run: |
           seleniumbase install chromedriver
+
       - name: 安装并启动代理 (全自动适配内核)
         env:
           PROXY_NODE: ${{ secrets.PROXY_NODE }}
@@ -75,7 +76,7 @@ jobs:
 
               outbound = {"tag": "proxy", "server": server, "server_port": port}
 
-              # --- 分流逻辑 1: VLESS (针对普通 TLS + WS 优化) ---
+              # --- 分流逻辑 1: VLESS ---
               if scheme == "vless":
                   outbound.update({
                       "type": "vless",
@@ -83,14 +84,12 @@ jobs:
                       "packet_encoding": "xudp",
                       "tls": {"enabled": True, "server_name": sni, "insecure": True}
                   })
-                  # 特别处理：如果是 WebSocket 传输
                   if params.get("type") == "ws":
                       outbound["transport"] = {
                           "type": "ws",
                           "path": unquote(params.get("path", "/")),
                           "headers": {"Host": sni}
                       }
-                  # 特别处理：如果是 Reality 模式
                   if params.get("security") == "reality":
                       outbound["tls"]["reality"] = {
                           "enabled": True,
@@ -98,7 +97,7 @@ jobs:
                           "short_id": params.get("sid", "")
                       }
 
-              # --- 分流逻辑 2: TUIC (保持原本可用的配置) ---
+              # --- 分流逻辑 2: TUIC ---
               elif scheme == "tuic":
                   u, pwd = raw_auth.split(':', 1) if ':' in raw_auth else (raw_auth, "")
                   outbound.update({
@@ -107,7 +106,7 @@ jobs:
                       "tls": {"enabled": True, "server_name": sni, "alpn": ["h3"], "insecure": True}
                   })
 
-              # --- 分流逻辑 3: Hysteria2 / VMess 兜底 ---
+              # --- 分流逻辑 3: Hysteria2 / VMess ---
               elif scheme in ["hysteria2", "hy2"]:
                   outbound.update({
                       "type": "hysteria2", "password": raw_auth,
@@ -139,6 +138,9 @@ jobs:
           if curl -x socks5://127.0.0.1:10808 -s --max-time 15 https://www.google.com > /dev/null; then
             echo "[INFO] ✅ 代理适配成功！当前协议: $(jq -r '.outbounds[0].type' config.json | tr '[:lower:]' '[:upper:]')"
             echo "PROXY_SOCKS5=socks5://127.0.0.1:10808" >> $GITHUB_ENV
+            echo "HTTP_PROXY=socks5://127.0.0.1:10808" >> $GITHUB_ENV
+            echo "HTTPS_PROXY=socks5://127.0.0.1:10808" >> $GITHUB_ENV
+            echo "ALL_PROXY=socks5://127.0.0.1:10808" >> $GITHUB_ENV
           else
             echo "[ERROR] ❌ 代理连接失败。脱敏配置预览如下："
             jq 'del(.outbounds[0].uuid, .outbounds[0].password)' config.json
@@ -153,6 +155,9 @@ jobs:
           PASSWORD: ${{ secrets.PASSWORD }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PROXY_SOCKS5: ${{ env.PROXY_SOCKS5 }}
+          HTTP_PROXY: ${{ env.HTTP_PROXY }}
+          HTTPS_PROXY: ${{ env.HTTPS_PROXY }}
         run: |
           # 使用 xvfb-run 模拟真实显示屏环境，以适配 uc=True 及 GUI 模式
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python up.py
