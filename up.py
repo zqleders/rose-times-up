@@ -84,30 +84,50 @@ def send_tg(token, chat_id, message, photo_path=None):
 # 登录流程
 def login(sb, email, password):
     print("🌐 打开登录页面...")
-    print("⏳ 等待页面加载...")
     sb.open(BASE_URL)
     sb.wait_for_ready_state_complete()
-    sb.sleep(1)
+    
+    # 显式等待输入框加载完成
+    print("⏳ 等待输入框加载...")
+    sb.wait_for_element_visible('#login_form_email', timeout=15)
+    sb.wait_for_element_visible('#login_form_password', timeout=15)
+    sb.sleep(2)
+
     print("📧 填写邮箱...")
     sb.type('#login_form_email', email, timeout=10)
+    
     print("🔑 填写密码...")
     sb.type('#login_form_password', password, timeout=10)
-    time.sleep(1) 
+    sb.sleep(1) 
+
+    # 检查输入框是否真的填入了内容，如果未写入则使用 JS 进行兜底赋值
+    email_val = sb.get_attribute('#login_form_email', 'value')
+    if not email_val:
+        print("⚠️ 常规 type 输入未生效，尝试使用 JS 强制写入邮箱和密码...")
+        sb.execute_script(f"document.querySelector('#login_form_email').value = '{email}';")
+        sb.execute_script(f"document.querySelector('#login_form_password').value = '{password}';")
+        sb.execute_script("document.querySelector('#login_form_email').dispatchEvent(new Event('input', { bubbles: true }));")
+        sb.execute_script("document.querySelector('#login_form_password').dispatchEvent(new Event('input', { bubbles: true }));")
+
     print("🛡 处理 Turnstile...")
+    sb.sleep(3)
     try:
         sb.uc_gui_click_captcha()
         print("✅ Turnstile 验证已处理")
-        # sb.save_screenshot("turnstile_passed.png")
     except Exception as e:
         print(f"⚠️ uc_gui_click_captcha 执行异常: {e}")
+
+    sb.sleep(2)
     print("🔑 点击登录按钮...")
     sb.uc_click('button:contains("Sign in")')
-    sb.sleep(6)
+    
+    # 点击后等待 5 秒以让页面状态稳定
+    sb.sleep(5)
     
     # 截图并发送到 Telegram
     login_click_img = "login_clicked.png"
     sb.save_screenshot(login_click_img)
-    send_tg(TG_BOT_TOKEN, TG_CHAT_ID, "📸 Rose 已输入账号密码并点击登录按钮，当前页面状态如下：", photo_path=login_click_img)
+    send_tg(TG_BOT_TOKEN, TG_CHAT_ID, "📸 已输入账号密码并点击登录按钮，当前页面状态如下：", photo_path=login_click_img)
 
     for _ in range(30):
         # 判断是否登录成功
@@ -116,7 +136,6 @@ def login(sb, email, password):
         print(f"📄 当前 URL: {current_url} | Title: {page_title}")
         if "panel" in current_url:
             print("✅ 登录成功，已跳转到 Dashboard")
-            # sb.save_screenshot("login_success.png")
             return True, current_url
         time.sleep(1)
 
@@ -147,7 +166,7 @@ def handle_renew_time_and_cron(date_text):
     # 1. 写入 cron.txt 纯表达式
     with open("cron.txt", "w") as f:
         f.write(cron_expr)
-    print(f"📝 固化 cron.txt: {cron_expr}")
+    print(f"📝 固化 Cloudflare Worker Cron 表达式至 cron.txt: {cron_expr}")
     
     # 2. 判断当前时间是否落在可续期时间窗口（到期前30分钟至到期时刻之间）
     now_utc = datetime.now(timezone.utc)
@@ -171,7 +190,7 @@ def main():
         success, url = login(sb, EMAIL, PASSWORD)
         
         if not success:
-            msg = f"❌ Rose 登录失败"
+            msg = f"❌ 登录失败"
             print(msg)
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
@@ -185,9 +204,9 @@ def main():
         try:
             date_elem = sb.find_element('//*[@id="selected-dates"]', timeout=10)
             date_text = date_elem.text.strip()
-            print(f"📅 Rose 获取到的续期时间段文本: {date_text}")
+            print(f"📅 获取到的续期时间段文本: {date_text}")
         except Exception as e:
-            msg = f"❌ Rose 未获取到续期时间段元素 (selected-dates): {e}"
+            msg = f"❌ 未获取到续期时间段元素 (selected-dates): {e}"
             print(msg)
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
@@ -196,7 +215,7 @@ def main():
         should_renew, cron_expr = handle_renew_time_and_cron(date_text)
         
         if not should_renew:
-            msg = f"ℹ️ Rose 尚未达到续期窗口（需在到期前30分钟内）。已更新 Cron 表达式 [{cron_expr}] 至 cron.txt，跳过本次 Order now。"
+            msg = f"ℹ️ 尚未达到续期窗口（需在到期前30分钟内）。已更新 Cron 表达式 [{cron_expr}] 至 cron.txt，跳过本次 Order now。"
             print(msg)
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
@@ -209,12 +228,12 @@ def main():
                 sb.uc_click('button:contains("Order now")')
                 print("✅ 已点击 Order now 按钮")
             else:
-                msg = "❌ Rose 未找到 Order now 按钮"
+                msg = "❌ 未找到 Order now 按钮"
                 print(msg)
                 send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
                 return
         except Exception as e:
-            msg = f"❌ Rose 点击 Order now 失败: {e}"
+            msg = f"❌ 点击 Order now 失败: {e}"
             print(msg)
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
@@ -224,11 +243,11 @@ def main():
         renewal_success, renewal_msg = check_renewal_success(sb)
         
         if renewal_success:
-            msg = f"✅ Rose 续期成功！{renewal_msg}\nWorker Cron: {cron_expr}"
+            msg = f"✅ 续期成功！{renewal_msg}\nWorker Cron: {cron_expr}"
             print(msg)
             sb.save_screenshot("renewal_success.png")
         else:
-            msg = f"❌ Rose 续期可能失败: {renewal_msg}"
+            msg = f"❌ 续期可能失败: {renewal_msg}"
             print(msg)
             sb.save_screenshot("renewal_failed.png")
         
