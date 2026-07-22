@@ -168,13 +168,20 @@ def handle_renew_time_and_cron(date_text):
         f.write(cron_expr)
     print(f"📝 固化 Cloudflare Worker Cron 表达式至 cron.txt: {cron_expr}")
     
-    # 2. 判断当前时间是否落在可续期时间窗口（到期前30分钟至到期时刻之间）
+    # 2. 判断当前时间是否满足续期条件
     now_utc = datetime.now(timezone.utc)
     print(f"🕒 当前 UTC 时间: {now_utc.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"⌛ 到期时刻: {start_dt.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"⏳ 允许续期开始时刻: {renew_window_start.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"⌛ 到期/起始时刻: {start_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"⏳ 允许续期开始时刻 (提前30分钟): {renew_window_start.strftime('%Y-%m-%d %H:%M:%S')}")
     
-    should_renew = renew_window_start <= now_utc <= start_dt
+    # 满足条件：当前时间 >= 到期前30分钟时刻 (覆盖了到期前30分钟内 以及 已过期的状态)
+    should_renew = now_utc >= renew_window_start
+    if should_renew:
+        if now_utc >= start_dt:
+            print("⚠️ 当前时间已超过起始时间（服务处于过期/待续期状态），满足续期条件")
+        else:
+            print("⏳ 当前时间已进入到期前 30 分钟内，满足续期条件")
+            
     return should_renew, cron_expr
 
 # 主流程
@@ -215,7 +222,7 @@ def main():
         should_renew, cron_expr = handle_renew_time_and_cron(date_text)
         
         if not should_renew:
-            msg = f"ℹ️ 尚未达到续期窗口（需在到期前30分钟内）。已更新 Cron 表达式 [{cron_expr}] 至 cron.txt，跳过本次 Order now。"
+            msg = f"ℹ️ 尚未达到续期窗口（需在到期前30分钟内或过期后）。已更新 Cron 表达式 [{cron_expr}] 至 cron.txt，跳过本次 Order now。"
             print(msg)
             send_tg(TG_BOT_TOKEN, TG_CHAT_ID, msg)
             return
