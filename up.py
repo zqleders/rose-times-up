@@ -102,7 +102,7 @@ def login(sb, email, password):
         print(f"⚠️ uc_gui_click_captcha 执行异常: {e}")
     print("🔑 点击登录按钮...")
     sb.uc_click('button:contains("Sign in")')
-    sb.sleep(3)
+    sb.sleep(6)
     
     # 截图并发送到 Telegram
     login_click_img = "login_clicked.png"
