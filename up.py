@@ -144,6 +144,7 @@ def login(sb, email, password):
     return False, sb.get_current_url()
 
 # 解析时间字符串并生成 Cron 表达式与续期判定
+# 解析时间字符串并生成 Cron 表达式与续期判定
 def handle_renew_time_and_cron(date_text):
     # 提取起始时间部分，例："21.07.2026, 21:50"
     start_str = date_text.split(" - ")[0].strip()
@@ -151,24 +152,34 @@ def handle_renew_time_and_cron(date_text):
     # 解析成 datetime 对象
     start_dt = datetime.strptime(start_str, "%d.%m.%Y, %H:%M").replace(tzinfo=timezone.utc)
     
-    # 可续期起始时刻：到期前 30 分钟
-    renew_window_start = start_dt - timedelta(minutes=30)
+    # 1. 算出到期时间在一天当中的 4 个基准小时 (例：到期小时为2，则基准为 2, 8, 14, 20)
+    base_hour = start_dt.hour % 6
+    target_hours = [(base_hour + i * 6) % 24 for i in range(4)]
     
-    # 计算每 6 小时触发一次对应的四个每天固定时刻 (Cron 分钟与小时)
-    minute = renew_window_start.minute
-    base_hour = renew_window_start.hour % 6
-    hours = [(base_hour + i * 6) % 24 for i in range(4)]
-    hours.sort()
+    # 2. 生成这 4 个到期时刻，并分别提前 30 分钟获取真实的 Cron 小时与分钟
+    cron_hours = []
+    cron_minute = 0
     
-    hours_str = ",".join(map(str, hours))
-    cron_expr = f"{minute} {hours_str} * * *"
+    for h in target_hours:
+        # 构造今天的这个到期时刻
+        target_dt = start_dt.replace(hour=h, minute=start_dt.minute, second=0, microsecond=0)
+        # 提前 30 分钟
+        trigger_dt = target_dt - timedelta(minutes=30)
+        
+        cron_minute = trigger_dt.minute  # 提前30分钟后的分钟
+        cron_hours.append(trigger_dt.hour)  # 提前30分钟后的小时
+        
+    cron_hours.sort()
+    hours_str = ",".join(map(str, cron_hours))
+    cron_expr = f"{cron_minute} {hours_str} * * *"
     
-    # 1. 写入 cron.txt 纯表达式
+    # 写入 cron.txt 纯表达式
     with open("cron.txt", "w") as f:
         f.write(cron_expr)
     print(f"📝 固化 Cloudflare Worker Cron 表达式至 cron.txt: {cron_expr}")
     
-    # 2. 判断当前时间是否满足续期条件
+    # 3. 判断当前时间是否满足续期条件 (提前 30 分钟时刻)
+    renew_window_start = start_dt - timedelta(minutes=30)
     now_utc = datetime.now(timezone.utc)
     print(f"🕒 当前 UTC 时间: {now_utc.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"⌛ 到期/起始时刻: {start_dt.strftime('%Y-%m-%d %H:%M:%S')}")
